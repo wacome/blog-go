@@ -518,22 +518,22 @@ func (c *CommentController) GitHubOAuthCallback(ctx *gin.Context) {
 		return
 	}
 
-	// 设置HTTP-only cookie
+	// 设置HTTP-only cookie，Domain 改为 .toycon.cn
 	ctx.SetCookie(
-		"auth_token",     // cookie名称
-		tokenString,      // token值
-		7*24*60*60,       // 过期时间：7天
-		"/",              // 路径
-		"blog.toycon.cn", // 域名（生产环境）
-		true,             // 仅HTTPS
-		true,             // HTTP-only
+		"auth_token", // cookie名称
+		tokenString,  // token值
+		7*24*60*60,   // 过期时间：7天
+		"/",          // 路径
+		".toycon.cn", // 域名（允许所有子域共享）
+		true,         // 仅HTTPS
+		true,         // HTTP-only
 	)
-	// 追加 SameSite=None
+	// 追加 SameSite=None，Domain 也为 .toycon.cn
 	ctx.Writer.Header().Add("Set-Cookie", (&http.Cookie{
 		Name:     "auth_token",
 		Value:    tokenString,
 		Path:     "/",
-		Domain:   "blog.toycon.cn",
+		Domain:   ".toycon.cn",
 		MaxAge:   7 * 24 * 60 * 60,
 		Secure:   true,
 		HttpOnly: true,
