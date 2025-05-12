@@ -64,19 +64,28 @@ func AuthRequired() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// 打印所有 cookie
 		log.Println("[AuthRequired] All cookies:", c.Request.Cookies())
-		// 只取第一个名为 auth_token 的 cookie
-		token, err := c.Cookie("auth_token")
-		if err != nil {
-			log.Println("[AuthRequired] No auth_token cookie found")
-			c.JSON(401, gin.H{
-				"code":    401,
-				"message": "未授权",
-				"data":    nil,
-			})
-			c.Abort()
-			return
+
+		token := ""
+		authHeader := c.GetHeader("Authorization")
+		if strings.HasPrefix(authHeader, "Bearer ") {
+			token = strings.TrimPrefix(authHeader, "Bearer ")
+			log.Println("[AuthRequired] Use Authorization header token")
+		} else {
+			var err error
+			token, err = c.Cookie("auth_token")
+			if err != nil {
+				log.Println("[AuthRequired] No auth_token cookie or Authorization header found")
+				c.JSON(401, gin.H{
+					"code":    401,
+					"message": "未授权",
+					"data":    nil,
+				})
+				c.Abort()
+				return
+			}
+			log.Println("[AuthRequired] Selected auth_token from cookie:", token)
 		}
-		log.Println("[AuthRequired] Selected auth_token:", token)
+
 		// 解析 JWT token
 		claims := jwt.MapClaims{}
 		parsedToken, err := jwt.ParseWithClaims(token, claims, func(token *jwt.Token) (interface{}, error) {
