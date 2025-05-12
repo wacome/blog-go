@@ -77,41 +77,25 @@ func (c *UserController) LoginUser(ctx *gin.Context) {
 	})
 }
 
-// GetUserProfile 获取用户资料
+// GetUserProfile 获取用户资料（只解析JWT，不查数据库）
 func (c *UserController) GetUserProfile(ctx *gin.Context) {
-	userID, exists := ctx.Get("userID")
-	if !exists {
-		utils.RespondError(ctx, http.StatusUnauthorized, "未授权访问")
-		return
-	}
-
-	uid, ok := userID.(int)
-	if !ok {
-		utils.RespondError(ctx, http.StatusInternalServerError, "用户ID类型错误")
-		return
-	}
-
-	// 查询用户信息
-	u, err := c.client.User.Query().
-		Where(user.IDEQ(uid)).
-		Only(context.Background())
+	token, err := ctx.Cookie("auth_token")
 	if err != nil {
-		if ent.IsNotFound(err) {
-			utils.RespondError(ctx, http.StatusNotFound, "用户不存在")
-			return
-		}
-		utils.RespondError(ctx, http.StatusInternalServerError, "获取用户资料失败")
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "未授权"})
 		return
 	}
-
-	utils.RespondSuccess(ctx, gin.H{
-		"id":       u.ID,
-		"username": u.Username,
-		"email":    u.Email,
-		"avatar":   u.Avatar,
-		"bio":      u.Bio,
-		"nickname": u.Nickname,
-		"role":     u.Role,
+	claims := jwt.MapClaims{}
+	_, err = jwt.ParseWithClaims(token, claims, func(token *jwt.Token) (interface{}, error) {
+		return []byte(c.secret), nil
+	})
+	if err != nil {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "无效token"})
+		return
+	}
+	ctx.JSON(http.StatusOK, gin.H{
+		"username": claims["username"],
+		"email":    claims["email"],
+		"avatar":   claims["avatar"],
 	})
 }
 
