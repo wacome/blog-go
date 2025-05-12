@@ -528,6 +528,17 @@ func (c *CommentController) GitHubOAuthCallback(ctx *gin.Context) {
 		true,             // 仅HTTPS
 		true,             // HTTP-only
 	)
+	// 追加 SameSite=None
+	ctx.Writer.Header().Add("Set-Cookie", (&http.Cookie{
+		Name:     "auth_token",
+		Value:    tokenString,
+		Path:     "/",
+		Domain:   "blog.toycon.cn",
+		MaxAge:   7 * 24 * 60 * 60,
+		Secure:   true,
+		HttpOnly: true,
+		SameSite: http.SameSiteNoneMode,
+	}).String())
 
 	// 构建重定向URL
 	returnUrl := "http://localhost:3000/auth/callback"
