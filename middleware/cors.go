@@ -17,6 +17,9 @@ func CORS() gin.HandlerFunc {
 		allowedOrigins := os.Getenv("ALLOWED_ORIGINS")
 		origin := c.Request.Header.Get("Origin")
 
+		log.Printf("[CORS] Request Origin: %s", origin)
+		log.Printf("[CORS] Allowed Origins: %s", allowedOrigins)
+
 		// 如果环境变量未设置，默认只允许本地开发环境
 		if allowedOrigins == "" {
 			allowedOrigins = "http://localhost:3000,http://127.0.0.1:3000"
@@ -24,11 +27,19 @@ func CORS() gin.HandlerFunc {
 
 		// 检查请求的域名是否在允许列表中
 		origins := strings.Split(allowedOrigins, ",")
+		originAllowed := false
 		for _, allowedOrigin := range origins {
-			if origin == strings.TrimSpace(allowedOrigin) {
+			allowedOrigin = strings.TrimSpace(allowedOrigin)
+			if origin == allowedOrigin {
+				originAllowed = true
 				c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+				log.Printf("[CORS] Origin allowed: %s", origin)
 				break
 			}
+		}
+
+		if !originAllowed {
+			log.Printf("[CORS] Origin not allowed: %s", origin)
 		}
 
 		// 设置响应头
