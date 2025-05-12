@@ -22,6 +22,9 @@ func RegisterRoutes(router *gin.RouterGroup, client *ent.Client) {
 	bookController := controllers.NewBookController(client)
 	imageController := controllers.NewImageController(client)
 
+	// 图片代理接口 - 移到最前面，不需要认证
+	router.GET("/proxy-image", controllers.ProxyImage)
+
 	// 文章相关路由
 	posts := router.Group("/posts")
 	{
@@ -134,7 +137,4 @@ func RegisterRoutes(router *gin.RouterGroup, client *ent.Client) {
 		images.DELETE("/:id", middleware.AuthRequired(), imageController.DeleteImage)
 		images.POST("/batch-delete", middleware.AuthRequired(), imageController.BatchDeleteImages)
 	}
-
-	// 图片代理接口
-	router.GET("/proxy-image", controllers.ProxyImage)
 }
