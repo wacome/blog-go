@@ -285,3 +285,27 @@ func (c *UserController) generateToken(userID int) (string, error) {
 
 	return tokenString, nil
 }
+
+// LogoutUser 退出登录，清除 cookie
+func (c *UserController) LogoutUser(ctx *gin.Context) {
+	ctx.SetCookie(
+		"auth_token",
+		"",
+		-1, // 立即过期
+		"/",
+		".toycon.cn",
+		true,
+		true,
+	)
+	ctx.Writer.Header().Add("Set-Cookie", (&http.Cookie{
+		Name:     "auth_token",
+		Value:    "",
+		Path:     "/",
+		Domain:   ".toycon.cn",
+		MaxAge:   -1,
+		Secure:   true,
+		HttpOnly: true,
+		SameSite: http.SameSiteNoneMode,
+	}).String())
+	ctx.JSON(http.StatusOK, gin.H{"message": "退出登录成功"})
+}

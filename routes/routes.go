@@ -65,6 +65,7 @@ func RegisterRoutes(router *gin.RouterGroup, client *ent.Client) {
 		auth.POST("/login", userController.LoginUser)
 		auth.GET("/github", commentController.GitHubOAuthLogin)
 		auth.GET("/github/callback", commentController.GitHubOAuthCallback)
+		auth.POST("/logout", userController.LogoutUser)
 	}
 
 	// 用户资料路由
