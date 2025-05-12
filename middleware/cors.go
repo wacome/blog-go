@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"blog-go/ent"
+
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -106,17 +108,49 @@ func AuthRequired() gin.HandlerFunc {
 
 		// 获取 username
 		username, ok := claims["username"].(string)
-		log.Println("[AuthRequired] username from claims:", username, ok)
 		if !ok {
-			c.JSON(401, gin.H{
-				"code":    401,
-				"message": "无效的token",
-				"data":    nil,
-			})
-			c.Abort()
-			return
+			// 尝试获取 userID
+			userIDFloat, ok := claims["userID"].(float64)
+			if !ok {
+				log.Println("[AuthRequired] 无 username 也无 userID")
+				c.JSON(401, gin.H{
+					"code":    401,
+					"message": "无效的token",
+					"data":    nil,
+				})
+				c.Abort()
+				return
+			}
+			userID := int(userIDFloat)
+			// 查库获取 username
+			entClient := ent.FromContext(c.Request.Context())
+			if entClient == nil {
+				log.Println("[AuthRequired] entClient is nil")
+				c.JSON(500, gin.H{
+					"code":    500,
+					"message": "服务器内部错误",
+					"data":    nil,
+				})
+				c.Abort()
+				return
+			}
+			userObj, err := entClient.User.Get(c.Request.Context(), userID)
+			if err != nil {
+				log.Println("[AuthRequired] 用户不存在:", userID)
+				c.JSON(401, gin.H{
+					"code":    401,
+					"message": "用户不存在",
+					"data":    nil,
+				})
+				c.Abort()
+				return
+			}
+			username = userObj.Username
+			c.Set("userID", userID)
+			log.Println("[AuthRequired] username from db:", username)
+		} else {
+			log.Println("[AuthRequired] username from claims:", username, ok)
 		}
-
 		// 将 username 注入到 context
 		c.Set("username", username)
 		c.Next()
