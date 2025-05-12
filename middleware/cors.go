@@ -62,7 +62,9 @@ func CORS() gin.HandlerFunc {
 // AuthRequired 身份验证中间件
 func AuthRequired() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 从cookie中获取token
+		// 打印所有 cookie
+		log.Println("[AuthRequired] All cookies:", c.Request.Cookies())
+		// 只取第一个名为 auth_token 的 cookie
 		token, err := c.Cookie("auth_token")
 		if err != nil {
 			log.Println("[AuthRequired] No auth_token cookie found")
@@ -74,15 +76,12 @@ func AuthRequired() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-
-		log.Println("[AuthRequired] auth_token from cookie:", token)
-
+		log.Println("[AuthRequired] Selected auth_token:", token)
 		// 解析 JWT token
 		claims := jwt.MapClaims{}
 		parsedToken, err := jwt.ParseWithClaims(token, claims, func(token *jwt.Token) (interface{}, error) {
 			return []byte(os.Getenv("JWT_SECRET")), nil
 		})
-
 		log.Println("[AuthRequired] JWT parse error:", err)
 		log.Println("[AuthRequired] JWT claims:", claims)
 
