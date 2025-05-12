@@ -16,6 +16,7 @@ import (
 	"blog-go/utils"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/github"
 )
@@ -509,11 +510,17 @@ func (c *CommentController) GitHubOAuthCallback(ctx *gin.Context) {
 		}
 	}
 
-	// 生成 JWT token
+	// 生成 JWT token，包含 username、email、avatar
 	jwtSecret := utils.GetEnv("JWT_SECRET", "your-secret-key")
-	tokenString, err := utils.GenerateToken(githubUser.Login, jwtSecret)
+	claims := jwt.MapClaims{
+		"username": githubUser.Login,
+		"email":    githubUser.Email,
+		"avatar":   githubUser.AvatarURL,
+		"exp":      time.Now().Add(time.Hour * 24 * 7).Unix(),
+	}
+	tokenObj := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := tokenObj.SignedString([]byte(jwtSecret))
 	if err != nil {
-		fmt.Printf("[GitHubOAuthCallback] 生成token失败: %v\n", err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "生成token失败，请稍后重试"})
 		return
 	}
