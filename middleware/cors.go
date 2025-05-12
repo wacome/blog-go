@@ -3,6 +3,7 @@ package middleware
 import (
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -12,10 +13,22 @@ import (
 // CORS 跨域中间件
 func CORS() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 允许前端开发服务器的域名
+		// 从环境变量获取允许的域名
+		allowedOrigins := os.Getenv("ALLOWED_ORIGINS")
 		origin := c.Request.Header.Get("Origin")
-		if origin == "http://localhost:3000" || origin == "http://127.0.0.1:3000" {
-			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+
+		// 如果环境变量未设置，默认只允许本地开发环境
+		if allowedOrigins == "" {
+			allowedOrigins = "http://localhost:3000,http://127.0.0.1:3000"
+		}
+
+		// 检查请求的域名是否在允许列表中
+		origins := strings.Split(allowedOrigins, ",")
+		for _, allowedOrigin := range origins {
+			if origin == strings.TrimSpace(allowedOrigin) {
+				c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+				break
+			}
 		}
 
 		// 设置响应头
