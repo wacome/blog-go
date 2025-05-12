@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -36,63 +37,83 @@ func ProxyImage(ctx *gin.Context) {
 
 	log.Printf("[ProxyImage] Proxying image from: %s", imageURL)
 
-	// 创建新的请求
-	req, err := http.NewRequest("GET", imageURL, nil)
-	if err != nil {
-		log.Printf("[ProxyImage] Failed to create request: %v", err)
-		ctx.Status(http.StatusInternalServerError)
-		return
+	// 创建自定义的 HTTP 客户端
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+		Transport: &http.Transport{
+			MaxIdleConns:        100,
+			MaxIdleConnsPerHost: 100,
+			IdleConnTimeout:     90 * time.Second,
+		},
 	}
 
-	// 设置请求头，模拟浏览器行为
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
-	req.Header.Set("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8")
-	req.Header.Set("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
-	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
-	req.Header.Set("Connection", "keep-alive")
-	req.Header.Set("Sec-Fetch-Dest", "image")
-	req.Header.Set("Sec-Fetch-Mode", "no-cors")
-	req.Header.Set("Sec-Fetch-Site", "cross-site")
-	req.Header.Set("Pragma", "no-cache")
-	req.Header.Set("Cache-Control", "no-cache")
+	// 尝试不同的请求头组合
+	headers := []map[string]string{
+		{
+			"User-Agent":      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+			"Accept":          "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+			"Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+			"Accept-Encoding": "gzip, deflate, br",
+			"Connection":      "keep-alive",
+			"Sec-Fetch-Dest":  "image",
+			"Sec-Fetch-Mode":  "no-cors",
+			"Sec-Fetch-Site":  "cross-site",
+			"Pragma":          "no-cache",
+			"Cache-Control":   "no-cache",
+			"Referer":         parsedURL.Scheme + "://" + parsedURL.Host,
+		},
+		{
+			"User-Agent":      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+			"Accept":          "*/*",
+			"Accept-Language": "en-US,en;q=0.9",
+			"Accept-Encoding": "gzip, deflate, br",
+			"Connection":      "keep-alive",
+		},
+		{
+			"User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+			"Accept":     "*/*",
+		},
+	}
 
-	// 设置 Referer，使用图片域名作为 Referer
-	referer := parsedURL.Scheme + "://" + parsedURL.Host
-	req.Header.Set("Referer", referer)
+	var resp *http.Response
+	var lastErr error
 
-	// 发送请求
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Printf("[ProxyImage] Failed to fetch image: %v", err)
+	// 尝试不同的请求头组合
+	for _, header := range headers {
+		req, err := http.NewRequest("GET", imageURL, nil)
+		if err != nil {
+			log.Printf("[ProxyImage] Failed to create request: %v", err)
+			continue
+		}
+
+		// 设置请求头
+		for key, value := range header {
+			req.Header.Set(key, value)
+		}
+
+		resp, err = client.Do(req)
+		if err != nil {
+			lastErr = err
+			log.Printf("[ProxyImage] Request failed: %v", err)
+			continue
+		}
+
+		if resp.StatusCode == http.StatusOK {
+			break
+		}
+
+		log.Printf("[ProxyImage] Request failed with status code: %d", resp.StatusCode)
+		resp.Body.Close()
+	}
+
+	if resp == nil || resp.StatusCode != http.StatusOK {
+		if lastErr != nil {
+			log.Printf("[ProxyImage] All attempts failed, last error: %v", lastErr)
+		}
 		ctx.Status(http.StatusInternalServerError)
 		return
 	}
 	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		log.Printf("[ProxyImage] Failed to fetch image, status code: %d", resp.StatusCode)
-		// 如果是 403，尝试不带 Referer 重试
-		if resp.StatusCode == http.StatusForbidden {
-			req.Header.Del("Referer")
-			resp, err = client.Do(req)
-			if err != nil {
-				log.Printf("[ProxyImage] Retry failed: %v", err)
-				ctx.Status(http.StatusInternalServerError)
-				return
-			}
-			defer resp.Body.Close()
-
-			if resp.StatusCode != http.StatusOK {
-				log.Printf("[ProxyImage] Retry failed with status code: %d", resp.StatusCode)
-				ctx.Status(resp.StatusCode)
-				return
-			}
-		} else {
-			ctx.Status(resp.StatusCode)
-			return
-		}
-	}
 
 	// 设置响应头
 	contentType := resp.Header.Get("Content-Type")
