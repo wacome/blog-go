@@ -1,0 +1,136 @@
+package middleware
+
+import (
+	"log"
+	"os"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
+)
+
+// CORS 跨域中间件
+func CORS() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// 允许前端开发服务器的域名
+		origin := c.Request.Header.Get("Origin")
+		if origin == "http://localhost:3000" || origin == "http://127.0.0.1:3000" {
+			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+		}
+
+		// 设置响应头
+		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE")
+		c.Writer.Header().Set("Access-Control-Max-Age", "86400")
+		c.Writer.Header().Set("Content-Type", "application/json")
+
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(204)
+			return
+		}
+
+		c.Next()
+	}
+}
+
+// AuthRequired 身份验证中间件
+func AuthRequired() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// 获取Authorization头
+		token := c.GetHeader("Authorization")
+		log.Println("[AuthRequired] Authorization header:", token)
+		if token == "" {
+			c.JSON(401, gin.H{
+				"code":    401,
+				"message": "未授权",
+				"data":    nil,
+			})
+			c.Abort()
+			return
+		}
+
+		// 去掉 Bearer 前缀
+		if len(token) > 7 && token[:7] == "Bearer " {
+			token = token[7:]
+		}
+
+		// 解析 JWT token
+		claims := jwt.MapClaims{}
+		parsedToken, err := jwt.ParseWithClaims(token, claims, func(token *jwt.Token) (interface{}, error) {
+			return []byte(os.Getenv("JWT_SECRET")), nil
+		})
+
+		log.Println("[AuthRequired] JWT parse error:", err)
+		log.Println("[AuthRequired] JWT claims:", claims)
+
+		if err != nil || !parsedToken.Valid {
+			c.JSON(401, gin.H{
+				"code":    401,
+				"message": "无效的token",
+				"data":    nil,
+			})
+			c.Abort()
+			return
+		}
+
+		// 获取 user_id
+		userID, ok := claims["userID"].(float64)
+		log.Println("[AuthRequired] userID from claims:", userID, ok)
+		if !ok {
+			c.JSON(401, gin.H{
+				"code":    401,
+				"message": "无效的token",
+				"data":    nil,
+			})
+			c.Abort()
+			return
+		}
+
+		// 将 user_id 注入到 context
+		c.Set("user_id", int(userID))
+		c.Next()
+	}
+}
+
+// Logger 日志中间件
+func Logger() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// 开始时间
+		startTime := time.Now()
+
+		// 处理请求
+		c.Next()
+
+		// 结束时间
+		endTime := time.Now()
+
+		// 执行时间
+		latency := endTime.Sub(startTime)
+
+		// 请求方法
+		reqMethod := c.Request.Method
+
+		// 请求路由
+		reqURI := c.Request.RequestURI
+
+		// 状态码
+		statusCode := c.Writer.Status()
+
+		// 请求IP
+		clientIP := c.ClientIP()
+
+		// 设置响应头
+		c.Writer.Header().Set("X-Response-Time", latency.String())
+
+		// 输出日志
+		log.Printf("[%s] %s %s %d %s %s",
+			clientIP,
+			reqMethod,
+			reqURI,
+			statusCode,
+			latency.String(),
+			c.Errors.String(),
+		)
+	}
+}
