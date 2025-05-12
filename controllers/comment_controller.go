@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
 	"time"
 
 	"blog-go/ent"
@@ -101,10 +100,10 @@ func (c *CommentController) AddComment(ctx *gin.Context) {
 	}
 
 	// 获取当前登录的用户（如果有）
-	var userID int
-	userIDValue, exists := ctx.Get("userID")
+	var username string
+	usernameValue, exists := ctx.Get("username")
 	if exists {
-		userID, _ = userIDValue.(int)
+		username = usernameValue.(string)
 	}
 
 	// 检查文章是否存在
@@ -139,8 +138,10 @@ func (c *CommentController) AddComment(ctx *gin.Context) {
 	}
 
 	// 如果是已登录用户
-	if userID != 0 {
-		u, err := c.client.User.Get(context.Background(), userID)
+	if username != "" {
+		u, err := c.client.User.Query().
+			Where(user.UsernameEQ(username)).
+			Only(context.Background())
 		if err == nil {
 			commentBuilder.SetUser(u)
 			// 如果是管理员或作者，自动审核评论
@@ -191,12 +192,12 @@ func (c *CommentController) DeleteComment(ctx *gin.Context) {
 	}
 
 	// 获取当前用户
-	userIDValue, exists := ctx.Get("user_id")
+	usernameValue, exists := ctx.Get("username")
 	if !exists {
 		ctx.JSON(http.StatusUnauthorized, gin.H{"code": 1, "message": "未授权操作", "data": nil})
 		return
 	}
-	userID, _ := userIDValue.(int)
+	username := usernameValue.(string)
 
 	// 获取评论
 	com, err := c.client.Comment.
@@ -214,7 +215,9 @@ func (c *CommentController) DeleteComment(ctx *gin.Context) {
 	}
 
 	// 获取用户
-	u, err := c.client.User.Get(context.Background(), userID)
+	u, err := c.client.User.Query().
+		Where(user.UsernameEQ(username)).
+		Only(context.Background())
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 1, "message": err.Error(), "data": nil})
 		return
@@ -233,7 +236,7 @@ func (c *CommentController) DeleteComment(ctx *gin.Context) {
 
 		// 检查是否为评论作者
 		isCommentAuthor := false
-		if com.Edges.User != nil && com.Edges.User.ID == userID {
+		if com.Edges.User != nil && com.Edges.User.Username == username {
 			isCommentAuthor = true
 		}
 
@@ -262,17 +265,17 @@ func (c *CommentController) ApproveComment(ctx *gin.Context) {
 	}
 
 	// 获取当前用户
-	userIDValue, exists := ctx.Get("user_id")
+	usernameValue, exists := ctx.Get("username")
 	if !exists {
 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "未授权操作"})
 		return
 	}
-	userID, _ := userIDValue.(int)
+	username := usernameValue.(string)
 
 	// 检查用户是否为管理员
 	u, err := c.client.User.
 		Query().
-		Where(user.IDEQ(userID)).
+		Where(user.UsernameEQ(username)).
 		Only(context.Background())
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -309,17 +312,17 @@ func (c *CommentController) ApproveComment(ctx *gin.Context) {
 // GetPendingComments 获取待审核评论
 func (c *CommentController) GetPendingComments(ctx *gin.Context) {
 	// 获取当前用户
-	userIDValue, exists := ctx.Get("userID")
+	usernameValue, exists := ctx.Get("username")
 	if !exists {
 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "未授权操作"})
 		return
 	}
-	userID, _ := userIDValue.(int)
+	username := usernameValue.(string)
 
 	// 检查用户是否为管理员
 	u, err := c.client.User.
 		Query().
-		Where(user.IDEQ(userID)).
+		Where(user.UsernameEQ(username)).
 		Only(context.Background())
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -515,28 +518,27 @@ func (c *CommentController) GitHubOAuthCallback(ctx *gin.Context) {
 		return
 	}
 
-	// 构建重定向 URL，包含用户信息和 token，回跳到原页面
-	returnUrl := "http://localhost:3000/"
+	// 设置HTTP-only cookie
+	ctx.SetCookie(
+		"auth_token", // cookie名称
+		tokenString,  // token值
+		7*24*60*60,   // 过期时间：7天
+		"/",          // 路径
+		"",           // 域名（空表示当前域名）
+		true,         // 是否只在HTTPS下传输
+		true,         // 是否HTTP-only
+	)
+
+	// 构建重定向URL
+	returnUrl := "http://localhost:3000/auth/callback"
 	if state != "" {
 		if u, err := url.QueryUnescape(state); err == nil {
 			returnUrl = u
 		}
 	}
 
-	// 构建查询参数
-	queryParams := url.Values{}
-	queryParams.Set("token", tokenString)
-	queryParams.Set("user", url.QueryEscape(fmt.Sprintf(`{"username":"%s","email":"%s","avatar":"%s"}`, githubUser.Login, githubUser.Email, githubUser.AvatarURL)))
-
-	// 拼接最终的 URL
-	redirectURL := returnUrl
-	if strings.Contains(returnUrl, "?") {
-		redirectURL += "&" + queryParams.Encode()
-	} else {
-		redirectURL += "?" + queryParams.Encode()
-	}
-
-	ctx.Redirect(http.StatusTemporaryRedirect, redirectURL)
+	// 重定向到前端回调页面
+	ctx.Redirect(http.StatusTemporaryRedirect, returnUrl)
 }
 
 // 递归获取评论嵌套深度

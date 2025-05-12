@@ -47,6 +47,7 @@ func CORS() gin.HandlerFunc {
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE")
 		c.Writer.Header().Set("Access-Control-Max-Age", "86400")
+		c.Writer.Header().Set("Access-Control-Expose-Headers", "Set-Cookie")
 		c.Writer.Header().Set("Content-Type", "application/json")
 
 		if c.Request.Method == "OPTIONS" {
@@ -61,10 +62,10 @@ func CORS() gin.HandlerFunc {
 // AuthRequired 身份验证中间件
 func AuthRequired() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 获取Authorization头
-		token := c.GetHeader("Authorization")
-		log.Println("[AuthRequired] Authorization header:", token)
-		if token == "" {
+		// 从cookie中获取token
+		token, err := c.Cookie("auth_token")
+		if err != nil {
+			log.Println("[AuthRequired] No auth_token cookie found")
 			c.JSON(401, gin.H{
 				"code":    401,
 				"message": "未授权",
@@ -74,10 +75,7 @@ func AuthRequired() gin.HandlerFunc {
 			return
 		}
 
-		// 去掉 Bearer 前缀
-		if len(token) > 7 && token[:7] == "Bearer " {
-			token = token[7:]
-		}
+		log.Println("[AuthRequired] auth_token from cookie:", token)
 
 		// 解析 JWT token
 		claims := jwt.MapClaims{}
@@ -98,9 +96,9 @@ func AuthRequired() gin.HandlerFunc {
 			return
 		}
 
-		// 获取 user_id
-		userID, ok := claims["userID"].(float64)
-		log.Println("[AuthRequired] userID from claims:", userID, ok)
+		// 获取 username
+		username, ok := claims["username"].(string)
+		log.Println("[AuthRequired] username from claims:", username, ok)
 		if !ok {
 			c.JSON(401, gin.H{
 				"code":    401,
@@ -111,8 +109,8 @@ func AuthRequired() gin.HandlerFunc {
 			return
 		}
 
-		// 将 user_id 注入到 context
-		c.Set("user_id", int(userID))
+		// 将 username 注入到 context
+		c.Set("username", username)
 		c.Next()
 	}
 }
