@@ -149,11 +149,23 @@ func (c *CommentController) AddComment(ctx *gin.Context) {
 			if u.Role == "admin" || p.Author == u.Username {
 				commentBuilder.SetApproved(true)
 			} else {
-				commentBuilder.SetApproved(false) // 需要审核
+				// 普通用户：百度内容安全自动审核
+				conclusion, err := utils.BaiduTextCensor(input.Content, utils.GetEnv("BAIDU_API_KEY", ""), utils.GetEnv("BAIDU_SECRET_KEY", ""))
+				autoApproved := false
+				if err == nil && conclusion == "合规" {
+					autoApproved = true
+				}
+				commentBuilder.SetApproved(autoApproved)
 			}
 		}
 	} else {
-		commentBuilder.SetApproved(false) // 匿名评论需要审核
+		// 匿名评论：百度内容安全自动审核
+		conclusion, err := utils.BaiduTextCensor(input.Content, utils.GetEnv("BAIDU_API_KEY", ""), utils.GetEnv("BAIDU_SECRET_KEY", ""))
+		autoApproved := false
+		if err == nil && conclusion == "合规" {
+			autoApproved = true
+		}
+		commentBuilder.SetApproved(autoApproved)
 	}
 
 	if input.ParentID != nil {
