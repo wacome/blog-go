@@ -58,14 +58,14 @@ func (c *BookController) CreateBook(ctx *gin.Context) {
 	fmt.Println("[CreateBook] input.Cover:", input.Cover)
 
 	// 获取当前用户
-	userID, exists := ctx.Get("user_id")
-	fmt.Println("[CreateBook] user_id from context:", userID, exists)
+	userID, exists := ctx.Get("userID")
+	fmt.Println("[CreateBook] userID from context:", userID, exists)
 	if !exists {
 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "未获取到用户ID"})
 		return
 	}
 	uid, ok := userID.(int)
-	fmt.Println("[CreateBook] user_id type assertion:", uid, ok)
+	fmt.Println("[CreateBook] userID type assertion:", uid, ok)
 	if !ok {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "用户ID类型错误"})
 		return
