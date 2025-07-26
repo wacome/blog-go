@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  # Go 应用服务
+  blog-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: blog-app
+    restart: always
+    ports:
+      - "2233:2233"
+    environment:
+      # --- 应用配置 ---
+      - ENV=production
+      - PORT=2233
+      - JWT_SECRET=your-super-secret-key-change-this # 请务必修改为一个更安全的密钥
+      - ALLOWED_ORIGINS=http://your-frontend-domain.com # 替换为您的前端域名
+
+      # --- 数据库连接配置 ---
+      - DB_HOST=postgres-db
+      - DB_PORT=5432
+      - DB_USER=${POSTGRES_USER}
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
+      - DB_NAME=${POSTGRES_DB}
+    volumes:
+      # 将宿主机的 uploads 目录挂载到容器中，以持久化上传的文件
+      - ./uploads:/app/uploads
+    depends_on:
+      # 确保数据库服务先于应用服务启动
+      - postgres-db
+    networks:
+      - blog-network
+
+  # PostgreSQL 数据库服务
+  postgres-db:
+    image: postgres:13-alpine # 使用轻量的 Alpine 版本
+    container_name: postgres-db
+    restart: always
+    environment:
+      # 从 .env 文件读取数据库的用户名、密码和数据库名
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    volumes:
+      # 将数据库数据持久化到宿主机
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      # 如果需要从外部访问数据库，可以取消下面的注释
+      # - "5432:5432"
+    networks:
+      - blog-network
+
+# 定义网络
+networks:
+  blog-network:
+    driver: bridge
+
+# 定义数据卷
+volumes:
+  postgres-data:
+    driver: local
